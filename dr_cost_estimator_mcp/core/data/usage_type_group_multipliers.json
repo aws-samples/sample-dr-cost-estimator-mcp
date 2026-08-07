@@ -1,0 +1,50 @@
+{
+  "Amazon Relational Database Service": {
+    "RDS: Running Hours": {
+      "backup_restore": 0.0,
+      "pilot_light": 0.5,
+      "warm_standby": 0.5,
+      "active_active": 1.0
+    },
+    "RDS: Storage": {
+      "backup_restore": 1.0,
+      "pilot_light": 1.0,
+      "warm_standby": 1.0,
+      "active_active": 1.0
+    },
+    "Aurora: Backup Usage": {
+      "backup_restore": 1.0,
+      "pilot_light": 1.0,
+      "warm_standby": 1.0,
+      "active_active": 1.0
+    },
+    "RDS: I/O Requests": {
+      "backup_restore": 0.0,
+      "pilot_light": 0.5,
+      "warm_standby": 0.5,
+      "active_active": 1.0
+    }
+  },
+  "Amazon OpenSearch Service": {
+    "OpenSearchService: Running Hours": {
+      "backup_restore": 0.0,
+      "pilot_light": 0.3,
+      "warm_standby": 0.7,
+      "active_active": 1.0
+    }
+  },
+  "Amazon Elastic Load Balancing": {
+    "EC2: ELB - Running Hours": {
+      "backup_restore": 0.0,
+      "pilot_light": 1.0,
+      "warm_standby": 1.0,
+      "active_active": 1.0
+    },
+    "EC2: ELB - LCU Running Hours": {
+      "backup_restore": 0.0,
+      "pilot_light": 0.0,
+      "warm_standby": 0.0,
+      "active_active": 0.0
+    }
+  }
+}

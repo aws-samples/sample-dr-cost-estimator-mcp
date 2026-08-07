@@ -1,0 +1,7 @@
+{
+  "backup_restore": 0.05,
+  "pilot_light": 0.10,
+  "warm_standby": 0.25,
+  "active_active": 0.50,
+  "rationale": "No specific guidance available. Using conservative general estimate."
+}

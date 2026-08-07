@@ -1,0 +1,136 @@
+{
+  "compute_serverless": {
+    "keywords": [
+      "lambda",
+      "app runner"
+    ],
+    "defaults": {
+      "backup_restore": 0.0,
+      "pilot_light": 0.0,
+      "warm_standby": 0.0,
+      "active_active": 0.0
+    },
+    "rationale": "Pure event-driven serverless compute (Lambda, App Runner) is billed per invocation; deployments in the DR region cost nothing until traffic arrives. Note: Lambda Provisioned Concurrency is available for warm-capacity scenarios that need pre-warmed runtimes; if used in DR, that line item will appear in the bill and be priced directly."
+  },
+  "compute_server": {
+    "keywords": [
+      "ec2",
+      "ecs",
+      "eks",
+      "fargate",
+      "batch",
+      "lightsail",
+      "elastic beanstalk",
+      "container",
+      "compute"
+    ],
+    "defaults": {
+      "backup_restore": 0.0,
+      "pilot_light": 0.0,
+      "warm_standby": 0.5,
+      "active_active": 1.0
+    },
+    "scales_with_warm_capacity": true,
+    "rationale": "Server-shaped or task-shaped compute (EC2, ECS/EKS Fargate, Batch, Beanstalk) runs no DR-region capacity at backup-restore or pilot-light. Warm standby runs ~50% of primary capacity per AWS Well-Architected guidance, with Auto Scaling configured to ramp to 100% on failover. Active/active runs full capacity in each Region so either can absorb the other's load with no ramp, roughly doubling total compute."
+  },
+  "data": {
+    "keywords": [
+      "s3",
+      "rds",
+      "dynamo",
+      "aurora",
+      "redshift",
+      "neptune",
+      "documentdb",
+      "elasticache",
+      "memorydb",
+      "keyspaces",
+      "timestream",
+      "qldb",
+      "ledger",
+      "database",
+      "storage",
+      "efs",
+      "fsx",
+      "backup",
+      "glacier"
+    ],
+    "defaults": {
+      "backup_restore": 0.05,
+      "pilot_light": 0.3,
+      "warm_standby": 0.8,
+      "active_active": 1.0
+    },
+    "rationale": "Data services replicate continuously across DR postures. Backup restore = snapshot-only; pilot light = small standing replica or storage-only replication; warm standby = scaled-down full replica running at the DR region; active/active = full mirror with replication overhead."
+  },
+  "networking": {
+    "keywords": [
+      "vpc",
+      "route 53",
+      "cloudfront",
+      "elb",
+      "load balancer",
+      "direct connect",
+      "transit gateway",
+      "global accelerator",
+      "api gateway",
+      "network",
+      "nat"
+    ],
+    "defaults": {
+      "backup_restore": 0.0,
+      "pilot_light": 0.3,
+      "warm_standby": 0.5,
+      "active_active": 0.5
+    },
+    "rationale": "DR-region load balancers, NAT gateways, VPC endpoints, and similar networking surface are pre-deployed at pilot-light for fast cutover and run at ~50% of primary surface for warm standby and active/active. Edge-only services like Route 53 and CloudFront resolve at curated entries first and may overshoot the category default; their absolute cost is small enough that the difference is rounding."
+  },
+  "streaming": {
+    "keywords": [
+      "kinesis",
+      "kafka",
+      "msk",
+      "sqs",
+      "sns",
+      "eventbridge",
+      "mq",
+      "firehose",
+      "streaming"
+    ],
+    "defaults": {
+      "backup_restore": 0.0,
+      "pilot_light": 0.1,
+      "warm_standby": 0.25,
+      "active_active": 0.5
+    },
+    "rationale": "Streaming services have provisioned capacity costs (shards, partitions) even without traffic."
+  },
+  "management": {
+    "keywords": [
+      "cloudwatch",
+      "cloudtrail",
+      "config",
+      "guardduty",
+      "security hub",
+      "inspector",
+      "macie",
+      "detective",
+      "shield",
+      "waf",
+      "kms",
+      "secrets manager",
+      "systems manager",
+      "trusted advisor",
+      "x-ray",
+      "certificate",
+      "iam"
+    ],
+    "defaults": {
+      "backup_restore": 0.05,
+      "pilot_light": 0.1,
+      "warm_standby": 0.15,
+      "active_active": 0.2
+    },
+    "rationale": "Security and management services have small incremental costs for monitoring DR region resources."
+  }
+}

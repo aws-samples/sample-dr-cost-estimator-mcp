@@ -1,0 +1,646 @@
+{
+  "cloudfront": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.0,
+    "active_active": 0.05,
+    "explanations": {
+      "pilot_light": "Slight increase to replicate static assets in S3 to DR region, but data requests served by CloudFront will not change.",
+      "warm_standby": "Same as pilot light - CloudFront serves from edge, no DR region cost.",
+      "backup_restore": "Nothing provisioned in DR region.",
+      "active_active": "Slight increase to replicate static assets; data volumes served by CloudFront unchanged."
+    }
+  },
+  "cloudwatch": {
+    "backup_restore": 0.05,
+    "pilot_light": 0.7,
+    "warm_standby": 0.75,
+    "active_active": 0.75,
+    "explanations": {
+      "pilot_light": "Logs volume unchanged. Metrics cost increases as they exist in DR region (mostly reporting zero). Alerts duplicated in DR.",
+      "warm_standby": "Same as pilot light with slightly more metrics from warm standby compute.",
+      "backup_restore": "Minimal increase for metrics on data/snapshots moved into new region.",
+      "active_active": "Logs unchanged. Metrics double across regions. Alerts duplicated."
+    }
+  },
+  "cloudwatch events": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.0,
+    "active_active": 0.0,
+    "explanations": {
+      "backup_restore": "CloudWatch Events (EventBridge) bills per event published; rules and bus definitions are free. Nothing runs in DR, so nothing publishes.",
+      "pilot_light": "Event buses and rules deployed in DR cost nothing until events flow, and no events flow until failover.",
+      "warm_standby": "Same as pilot light: per-event billing means the idle DR bus is free even with warm compute running, unless DR-side workloads publish events.",
+      "active_active": "Event volume splits across regions; total events published are unchanged, so no additional charge."
+    }
+  },
+  "dms": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.1,
+    "active_active": 0.0,
+    "explanations": {
+      "pilot_light": "No provisioned DMS instances in secondary region. DMS remains inactive until failover.",
+      "warm_standby": "DMS instances running at reduced capacity (~10%). Inactive until secondary becomes primary.",
+      "backup_restore": "No provisioned DMS instances in secondary region.",
+      "active_active": "Assuming 50-50 workload split. DMS instance sizes could be reduced in both regions."
+    }
+  },
+  "dynamodb": {
+    "backup_restore": 0.02,
+    "pilot_light": 0.55,
+    "warm_standby": 0.55,
+    "active_active": 0.55,
+    "explanations": {
+      "backup_restore": "PITR plus AWS Backup cross-region copy. No Global Table; storage-only cost is small fraction of baseline.",
+      "pilot_light": "Global Tables replica in DR region. Replicates writes (rWRU at ~$1.25/M) and storage; no read traffic in DR. Multiplier captures binary cost shape.",
+      "warm_standby": "Same as pilot light. Global Tables has no scaled-down replica option; either you have a replica or you don't.",
+      "active_active": "Same as pilot light, plus DR region serves traffic. Read costs split 50/50 across regions; write costs unchanged."
+    }
+  },
+  "ec2-elb": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.2,
+    "warm_standby": 0.2,
+    "active_active": 0.2,
+    "explanations": {
+      "pilot_light": "Pay for running load balancers in secondary region. No consumption-based costs since not serving workloads. ~20% for ELB hours.",
+      "warm_standby": "Same as pilot light - ELBs running but minimal traffic.",
+      "backup_restore": "Nothing provisioned in DR region.",
+      "active_active": "Second load balancer runs in the DR Region (added hours); traffic splits across Regions so total capacity-unit (LCU) charges don't increase."
+    }
+  },
+  "elastic load balancing": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.2,
+    "warm_standby": 0.2,
+    "active_active": 0.2,
+    "explanations": {
+      "pilot_light": "Pay for running load balancers in secondary region. No consumption-based costs since not serving workloads. ~20% for ELB hours.",
+      "warm_standby": "Same as pilot light - ELBs running but minimal traffic.",
+      "backup_restore": "Nothing provisioned in DR region.",
+      "active_active": "Second load balancer runs in the DR Region (added hours); traffic splits across Regions so total capacity-unit (LCU) charges don't increase."
+    }
+  },
+  "ec2-instances": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.5,
+    "active_active": 1.0,
+    "scales_with_warm_capacity": true,
+    "explanations": {
+      "pilot_light": "No provisioned compute capacity in secondary region.",
+      "warm_standby": "Scaled-down but fully functional fleet at ~50% of primary; Auto Scaling ramps to 100% on failover.",
+      "backup_restore": "Nothing provisioned in DR region.",
+      "active_active": "Full capacity in each Region so either absorbs the other's load with no ramp; total compute roughly doubles the single-Region baseline."
+    }
+  },
+  "amazon elastic compute cloud - compute": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.5,
+    "active_active": 1.0,
+    "scales_with_warm_capacity": true,
+    "explanations": {
+      "pilot_light": "No provisioned compute capacity in secondary region.",
+      "warm_standby": "Scaled-down but fully functional fleet at ~50% of primary; Auto Scaling ramps to 100% on failover.",
+      "backup_restore": "Nothing provisioned in DR region.",
+      "active_active": "Full capacity in each Region so either absorbs the other's load with no ramp; total compute roughly doubles the single-Region baseline."
+    }
+  },
+  "ec2-other": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.5,
+    "active_active": 1.0,
+    "scales_with_warm_capacity": true,
+    "explanations": {
+      "pilot_light": "Stateless EC2 tier recovers from AMIs and IaC; no EBS snapshots copied to DR.",
+      "warm_standby": "EBS scales with the DR EC2 footprint, ~50% at warm standby.",
+      "backup_restore": "Stateless EC2 tier recovers from AMIs and IaC; no EBS snapshots copied to DR. AMI storage is per-image and negligible.",
+      "active_active": "EBS mirrors full compute in both Regions; volumes duplicated at 100%."
+    }
+  },
+  "ec2 - other": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.5,
+    "active_active": 1.0,
+    "scales_with_warm_capacity": true,
+    "explanations": {
+      "pilot_light": "Stateless EC2 tier recovers from AMIs and IaC; no EBS snapshots copied to DR.",
+      "warm_standby": "EBS scales with the DR EC2 footprint, ~50% at warm standby.",
+      "backup_restore": "Stateless EC2 tier recovers from AMIs and IaC; no EBS snapshots copied to DR. AMI storage is per-image and negligible.",
+      "active_active": "EBS mirrors full compute in both Regions; volumes duplicated at 100%."
+    }
+  },
+  "elastic container service": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.5,
+    "active_active": 1.0,
+    "scales_with_warm_capacity": true,
+    "explanations": {
+      "pilot_light": "No ECS tasks running in secondary region.",
+      "warm_standby": "Scaled-down but fully functional ECS tasks at ~50% of primary; Auto Scaling ramps to 100% on failover.",
+      "backup_restore": "ECS task definitions are config; nothing to back up. Container images are billed separately under ECR.",
+      "active_active": "Full-capacity ECS tasks in each Region so either absorbs the other's load with no ramp; total task compute roughly doubles."
+    }
+  },
+  "ecs": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.5,
+    "active_active": 1.0,
+    "scales_with_warm_capacity": true,
+    "explanations": {
+      "pilot_light": "No ECS tasks running in secondary region.",
+      "warm_standby": "Scaled-down but fully functional ECS tasks at ~50% of primary; Auto Scaling ramps to 100% on failover.",
+      "backup_restore": "ECS task definitions are config; nothing to back up. Container images are billed separately under ECR.",
+      "active_active": "Full-capacity ECS tasks in each Region so either absorbs the other's load with no ramp; total task compute roughly doubles."
+    }
+  },
+  "elastic container service for kubernetes": {
+    "backup_restore": 0.0,
+    "pilot_light": 1.0,
+    "warm_standby": 1.0,
+    "active_active": 1.0,
+    "explanations": {
+      "backup_restore": "No DR-region cluster, so no control plane fee until failover bring-up. Container images replicate under ECR, not this line.",
+      "pilot_light": "The EKS control plane bills a flat hourly fee per cluster whether or not workloads run, so a pilot-light cluster doubles this line even at zero nodes. EC2 worker nodes bill under EC2, not here.",
+      "warm_standby": "Same as pilot light: the control plane fee is flat, so the DR cluster doubles this line regardless of warm node count. Warm EC2 node capacity bills under EC2. EKS Fargate pods, if used, add to this line only while running.",
+      "active_active": "A full control plane runs in each region, doubling this line. Worker capacity in both regions bills under EC2 (EKS Fargate pod usage would land on this line)."
+    }
+  },
+  "elastic kubernetes service": {
+    "backup_restore": 0.0,
+    "pilot_light": 1.0,
+    "warm_standby": 1.0,
+    "active_active": 1.0,
+    "explanations": {
+      "backup_restore": "No DR-region cluster, so no control plane fee until failover bring-up. Container images replicate under ECR, not this line.",
+      "pilot_light": "The EKS control plane bills a flat hourly fee per cluster whether or not workloads run, so a pilot-light cluster doubles this line even at zero nodes. EC2 worker nodes bill under EC2, not here.",
+      "warm_standby": "Same as pilot light: the control plane fee is flat, so the DR cluster doubles this line regardless of warm node count. Warm EC2 node capacity bills under EC2. EKS Fargate pods, if used, add to this line only while running.",
+      "active_active": "A full control plane runs in each region, doubling this line. Worker capacity in both regions bills under EC2 (EKS Fargate pod usage would land on this line)."
+    }
+  },
+  "elastic file system": {
+    "backup_restore": 0.2,
+    "pilot_light": 1.0,
+    "warm_standby": 1.0,
+    "active_active": 1.0,
+    "explanations": {
+      "backup_restore": "AWS Backup cross-region copy at warm-tier pricing; ~20% of source storage cost.",
+      "pilot_light": "EFS Replication active to DR. DR storage costs full primary rate plus replication transfer.",
+      "warm_standby": "Same as pilot light. EFS Replication is the same primitive across postures.",
+      "active_active": "EFS does not support multi-region active/active. Treat as warm standby with DR-region mount targets active."
+    }
+  },
+  "efs": {
+    "backup_restore": 0.2,
+    "pilot_light": 1.0,
+    "warm_standby": 1.0,
+    "active_active": 1.0,
+    "explanations": {
+      "backup_restore": "AWS Backup cross-region copy at warm-tier pricing; ~20% of source storage cost.",
+      "pilot_light": "EFS Replication active to DR. DR storage costs full primary rate plus replication transfer.",
+      "warm_standby": "Same as pilot light. EFS Replication is the same primitive across postures.",
+      "active_active": "EFS does not support multi-region active/active. Treat as warm standby with DR-region mount targets active."
+    }
+  },
+  "fsx": {
+    "backup_restore": 0.5,
+    "pilot_light": 1.0,
+    "warm_standby": 1.0,
+    "active_active": 1.0,
+    "explanations": {
+      "backup_restore": "AWS Backup cross-region copy of the file system. Backup vault storage plus incremental transfer; 0.5 is conservative and assumes multi-snapshot retention in the DR region. No DR-region file system runs.",
+      "pilot_light": "A standing DR file system at full provisioned storage and throughput capacity (FSx bills provisioned capacity whether used or not), kept in sync via SnapMirror (FSx for ONTAP) or scheduled AWS Backup copies (other FSx types).",
+      "warm_standby": "Same as pilot light: the standing DR file system bills its full provisioned capacity across postures.",
+      "active_active": "FSx has no native multi-region active/active. Treat as warm standby with the DR file system live and mounted."
+    }
+  },
+  "elasticache": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.3,
+    "warm_standby": 0.65,
+    "active_active": 0.65,
+    "explanations": {
+      "backup_restore": "Cache data is ephemeral; no backup needed. The cache rebuilds from the source database on failover.",
+      "pilot_light": "Global Datastore secondary cluster at ~30% of primary node count.",
+      "warm_standby": "Global Datastore secondary at ~65% of primary; ready to absorb traffic on failover.",
+      "active_active": "Same as warm standby. Global Datastore is single-leader; true active/active requires app-level dual-write."
+    }
+  },
+  "elastic mapreduce": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.5,
+    "active_active": 1.0,
+    "scales_with_warm_capacity": true,
+    "explanations": {
+      "pilot_light": "No provisioned EMR clusters in secondary region.",
+      "warm_standby": "Scaled-down EMR cluster at ~50% of primary; Auto Scaling ramps to 100% on failover.",
+      "backup_restore": "Nothing provisioned in DR region.",
+      "active_active": "Full-capacity clusters in each Region so either absorbs the other's load with no ramp; total compute roughly doubles."
+    }
+  },
+  "emr": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.5,
+    "active_active": 1.0,
+    "scales_with_warm_capacity": true,
+    "explanations": {
+      "pilot_light": "No provisioned EMR clusters in secondary region.",
+      "warm_standby": "Scaled-down EMR cluster at ~50% of primary; Auto Scaling ramps to 100% on failover.",
+      "backup_restore": "Nothing provisioned in DR region.",
+      "active_active": "Full-capacity clusters in each Region so either absorbs the other's load with no ramp; total compute roughly doubles."
+    }
+  },
+  "amazon q": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.0,
+    "active_active": 0.0,
+    "explanations": {
+      "backup_restore": "Per-user subscription service, not region-bound infrastructure. Nothing runs in a DR region; the subscription follows the users.",
+      "pilot_light": "Same as backup restore: no regional footprint to keep warm.",
+      "warm_standby": "Same as backup restore: subscription pricing is unaffected by DR posture.",
+      "active_active": "Same as backup restore: one subscription regardless of how many regions the workload spans."
+    }
+  },
+  "codewhisperer": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.0,
+    "active_active": 0.0,
+    "explanations": {
+      "backup_restore": "Legacy Cost Explorer billing name for what is now Amazon Q Developer. Per-user subscription, not region-bound; nothing to replicate for DR.",
+      "pilot_light": "Same as backup restore: no regional footprint to keep warm.",
+      "warm_standby": "Same as backup restore: subscription pricing is unaffected by DR posture.",
+      "active_active": "Same as backup restore: one subscription regardless of how many regions the workload spans."
+    }
+  },
+  "shield": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.0,
+    "active_active": 0.0,
+    "explanations": {
+      "backup_restore": "Shield Advanced is one monthly subscription per consolidated-billing family covering all subscribed accounts and regions; protecting DR-region resources adds no second subscription.",
+      "pilot_light": "Same subscription covers DR-region resources. Usage-based data-transfer-out fees track protected traffic, which is near zero in standby.",
+      "warm_standby": "Same subscription covers DR-region resources; standby traffic keeps usage fees negligible.",
+      "active_active": "One subscription still covers both regions. Usage-based fees follow traffic, which splits rather than doubles."
+    }
+  },
+  "bedrock": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.0,
+    "active_active": 0.0,
+    "explanations": {
+      "backup_restore": "Serverless inference billed per token; no provisioned capacity to replicate. Prompts, agents, and knowledge-base configs are redeployable artifacts.",
+      "pilot_light": "No invocations in the DR region means no charges; on-demand inference has nothing standing to keep warm.",
+      "warm_standby": "Same as pilot light for on-demand inference. Note: Provisioned Throughput, if purchased in DR, would bill directly and is not covered by this multiplier.",
+      "active_active": "Invocations split across regions; per-token billing means total inference cost is unchanged."
+    }
+  },
+  "resilience hub": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.0,
+    "active_active": 0.0,
+    "explanations": {
+      "backup_restore": "Resilience Hub is the DR assessment tooling itself, billed per application assessed; it is not workload infrastructure that gets a DR replica.",
+      "pilot_light": "Same as backup restore: assessment tooling, not a DR target.",
+      "warm_standby": "Same as backup restore: assessment tooling, not a DR target.",
+      "active_active": "Same as backup restore: assessment tooling, not a DR target."
+    }
+  },
+  "guardduty": {
+    "backup_restore": 0.1,
+    "pilot_light": 0.1,
+    "warm_standby": 0.1,
+    "active_active": 0.1,
+    "explanations": {
+      "backup_restore": "GuardDuty bills per region on analyzed volume: CloudTrail events, VPC Flow Logs, and DNS query logs. Enabling it in the DR region (best practice regardless of DR posture) analyzes only the small event volume a mostly-empty region generates.",
+      "pilot_light": "Same basis as backup restore: the DR region's analyzed volume is driven by its tiny footprint (replication endpoints, standby data services), a small fraction of the busy primary.",
+      "warm_standby": "The warm fleet raises DR-region flow-log and DNS-log volume somewhat, but analyzed volume still trails the traffic-serving primary by a wide margin.",
+      "active_active": "Analyzed traffic volume splits across regions rather than doubling; the residual increase is the per-region baseline of CloudTrail management activity now analyzed in two regions."
+    }
+  },
+  "key management service": {
+    "backup_restore": 0.8,
+    "pilot_light": 0.8,
+    "warm_standby": 0.8,
+    "active_active": 1.0,
+    "explanations": {
+      "pilot_light": "Key creation ($1/mo each) + reduced API usage (encrypt/decrypt). Traffic not active so API usage decreases slightly.",
+      "warm_standby": "Same as pilot light: replica keys carry the per-key monthly fee regardless of posture, and API call volume tracks data replication activity, which does not change between standby postures.",
+      "backup_restore": "Same as pilot light - keys needed for encrypted data at rest.",
+      "active_active": "Keys and API usage double across both regions for all activities including read-only replication."
+    }
+  },
+  "kms": {
+    "backup_restore": 0.8,
+    "pilot_light": 0.8,
+    "warm_standby": 0.8,
+    "active_active": 1.0,
+    "explanations": {
+      "pilot_light": "Key creation ($1/mo each) + reduced API usage (encrypt/decrypt). Traffic not active so API usage decreases slightly.",
+      "warm_standby": "Same as pilot light: replica keys carry the per-key monthly fee regardless of posture, and API call volume tracks data replication activity, which does not change between standby postures.",
+      "backup_restore": "Same as pilot light - keys needed for encrypted data at rest.",
+      "active_active": "Keys and API usage double across both regions for all activities including read-only replication."
+    }
+  },
+  "kinesis": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.25,
+    "warm_standby": 0.25,
+    "active_active": 0.0,
+    "explanations": {
+      "pilot_light": "Costs for maintaining streams in DR. No PUT payload costs. Based on provisioned shards in secondary.",
+      "warm_standby": "Same as pilot light: provisioned shard capacity in DR bills the same whether compute is warm or off, and no ingestion means no payload charges either way.",
+      "backup_restore": "No Kinesis charges in DR. All streams created upon bring-up.",
+      "active_active": "Data ingestion and retrieval split across two regions."
+    }
+  },
+  "kinesis firehose": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.25,
+    "warm_standby": 0.25,
+    "active_active": 0.0,
+    "explanations": {
+      "pilot_light": "Costs for maintaining streams in DR. No PUT payload costs. Based on provisioned shards in secondary.",
+      "warm_standby": "Same as pilot light: provisioned shard capacity in DR bills the same whether compute is warm or off, and no ingestion means no payload charges either way.",
+      "backup_restore": "No Kinesis charges in DR. All streams created upon bring-up.",
+      "active_active": "Data ingestion and retrieval split across two regions."
+    }
+  },
+  "kinesis analytics": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.25,
+    "warm_standby": 0.25,
+    "active_active": 0.0,
+    "explanations": {
+      "pilot_light": "Costs for maintaining streams in DR. No PUT payload costs. Based on provisioned shards in secondary.",
+      "warm_standby": "Same as pilot light: provisioned shard capacity in DR bills the same whether compute is warm or off, and no ingestion means no payload charges either way.",
+      "backup_restore": "No Kinesis charges in DR. All streams created upon bring-up.",
+      "active_active": "Data ingestion and retrieval split across two regions."
+    }
+  },
+  "lambda": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.0,
+    "active_active": 0.0,
+    "explanations": {
+      "pilot_light": "No Lambda executions in secondary region.",
+      "warm_standby": "No Lambda executions in secondary region.",
+      "backup_restore": "Nothing provisioned in DR region.",
+      "active_active": "Executions split across two regions."
+    }
+  },
+  "managed streaming for apache kafka": {
+    "backup_restore": 0.05,
+    "pilot_light": 0.65,
+    "warm_standby": 1.0,
+    "active_active": 1.9,
+    "explanations": {
+      "backup_restore": "Tiered storage to S3 with cross-region replication. No DR-region cluster.",
+      "pilot_light": "Small DR cluster (~33% of primary brokers) plus MSK Replicator replicating all topics. Replicator cost scales with throughput, not posture.",
+      "warm_standby": "DR cluster at ~67% of primary brokers plus MSK Replicator. Ready to absorb traffic on failover.",
+      "active_active": "Full mirror DR cluster plus bidirectional MSK Replicator; both regions serve traffic."
+    }
+  },
+  "msk": {
+    "backup_restore": 0.05,
+    "pilot_light": 0.65,
+    "warm_standby": 1.0,
+    "active_active": 1.9,
+    "explanations": {
+      "backup_restore": "Tiered storage to S3 with cross-region replication. No DR-region cluster.",
+      "pilot_light": "Small DR cluster (~33% of primary brokers) plus MSK Replicator replicating all topics. Replicator cost scales with throughput, not posture.",
+      "warm_standby": "DR cluster at ~67% of primary brokers plus MSK Replicator. Ready to absorb traffic on failover.",
+      "active_active": "Full mirror DR cluster plus bidirectional MSK Replicator; both regions serve traffic."
+    }
+  },
+  "neptune": {
+    "backup_restore": 0.4,
+    "pilot_light": 0.8,
+    "warm_standby": 0.8,
+    "active_active": 0.8,
+    "explanations": {
+      "pilot_light": "Neptune global database: a secondary cluster with reduced instance sizes replicates continuously. DR storage and replicated write I/Os mirror the primary; reduced compute keeps the total below 1x.",
+      "warm_standby": "Same shape as pilot light: a reduced-size secondary cluster in the global database, ready to promote on failover.",
+      "backup_restore": "Neptune cross-region snapshot copies are full copies each time (no incremental cross-region backups), so recurring data transfer plus DR-region backup storage add up to a substantial fraction of cluster spend.",
+      "active_active": "Neptune has no native active-active; the secondary cluster in a global database is read-only. The posture is the same reduced-size secondary as warm standby, so the cost matches warm standby."
+    }
+  },
+  "opensearch service": {
+    "backup_restore": 0.025,
+    "pilot_light": 0.3,
+    "warm_standby": 0.7,
+    "active_active": 1.0,
+    "explanations": {
+      "backup_restore": "Manual snapshots to S3 in DR region. No DR-region cluster running.",
+      "pilot_light": "Cross-cluster replication (CCR) follower at ~30% of primary cluster size.",
+      "warm_standby": "CCR follower at ~70% of primary cluster size, ready to absorb traffic on failover.",
+      "active_active": "OpenSearch has no native active/active (CCR is single-leader). Two equally-sized clusters with bidirectional CCR; non-canonical."
+    }
+  },
+  "opensearch": {
+    "backup_restore": 0.025,
+    "pilot_light": 0.3,
+    "warm_standby": 0.7,
+    "active_active": 1.0,
+    "explanations": {
+      "backup_restore": "Manual snapshots to S3 in DR region. No DR-region cluster running.",
+      "pilot_light": "Cross-cluster replication (CCR) follower at ~30% of primary cluster size.",
+      "warm_standby": "CCR follower at ~70% of primary cluster size, ready to absorb traffic on failover.",
+      "active_active": "OpenSearch has no native active/active (CCR is single-leader). Two equally-sized clusters with bidirectional CCR; non-canonical."
+    }
+  },
+  "redshift": {
+    "backup_restore": 0.01,
+    "pilot_light": 0.01,
+    "warm_standby": 0.5,
+    "active_active": 0.5,
+    "explanations": {
+      "backup_restore": "Cross-region snapshot copy to S3 in DR. No DR-region cluster; storage-only cost is small fraction of cluster compute.",
+      "pilot_light": "Same as backup restore: snapshot-based recovery, no DR-region cluster running.",
+      "warm_standby": "Scaled-down DR cluster (~50% of primary node count) running continuously, ready to absorb traffic on failover.",
+      "active_active": "Redshift has no native active/active. Closest pattern is warm standby with cluster running 24/7; treat as informational."
+    }
+  },
+  "relational database service": {
+    "backup_restore": 0.03,
+    "pilot_light": 0.5,
+    "warm_standby": 0.5,
+    "active_active": 1.0,
+    "explanations": {
+      "pilot_light": "One cross-Region read replica at the same instance class as primary (best practice); one instance of a writer+reader pair = 50%.",
+      "warm_standby": "Scaled-down DR cluster sized to ~50% of primary writer+reader capacity, ready to absorb traffic.",
+      "backup_restore": "Cross-region automated backups of the data tier (~3% of cluster compute); no DR-region compute.",
+      "active_active": "A second full cluster (compute and storage) with bidirectional replication (e.g., via DMS). Cross-region replication traffic is workload-dependent and out of model."
+    }
+  },
+  "rds": {
+    "backup_restore": 0.03,
+    "pilot_light": 0.5,
+    "warm_standby": 0.5,
+    "active_active": 1.0,
+    "explanations": {
+      "pilot_light": "One cross-Region read replica at the same instance class as primary (best practice); one instance of a writer+reader pair = 50%.",
+      "warm_standby": "Scaled-down DR cluster sized to ~50% of primary writer+reader capacity, ready to absorb traffic.",
+      "backup_restore": "Cross-region automated backups of the data tier (~3% of cluster compute); no DR-region compute.",
+      "active_active": "A second full cluster (compute and storage) with bidirectional replication (e.g., via DMS). Cross-region replication traffic is workload-dependent and out of model."
+    }
+  },
+  "documentdb": {
+    "backup_restore": 0.03,
+    "pilot_light": 0.8,
+    "warm_standby": 0.8,
+    "active_active": 1.0,
+    "explanations": {
+      "pilot_light": "DocumentDB global cluster: a secondary cluster with reduced instance sizes replicates continuously. Storage-based replication means DR storage costs mirror the primary; instance compute is the smaller share.",
+      "warm_standby": "Same shape as pilot light: a reduced-size secondary cluster in the global cluster, ready to promote on failover.",
+      "backup_restore": "Cross-region snapshot copies of the data tier only (~3% of cluster spend); no DR-region compute.",
+      "active_active": "DocumentDB has no native active-active. A full-size secondary cluster serving reads is the closest posture; the DR cluster mirrors primary compute and storage."
+    }
+  },
+  "documentdb (with mongodb compatibility)": {
+    "backup_restore": 0.03,
+    "pilot_light": 0.8,
+    "warm_standby": 0.8,
+    "active_active": 1.0,
+    "explanations": {
+      "pilot_light": "DocumentDB global cluster: a secondary cluster with reduced instance sizes replicates continuously. Storage-based replication means DR storage costs mirror the primary; instance compute is the smaller share.",
+      "warm_standby": "Same shape as pilot light: a reduced-size secondary cluster in the global cluster, ready to promote on failover.",
+      "backup_restore": "Cross-region snapshot copies of the data tier only (~3% of cluster spend); no DR-region compute.",
+      "active_active": "DocumentDB has no native active-active. A full-size secondary cluster serving reads is the closest posture; the DR cluster mirrors primary compute and storage."
+    }
+  },
+  "s3": {
+    "backup_restore": 1.0,
+    "pilot_light": 1.0,
+    "warm_standby": 1.0,
+    "active_active": 1.0,
+    "explanations": {
+      "pilot_light": "Cross-region replication (CRR). Entire bucket replicated. Versioning required. Incremental costs: primary costs + data transfer.",
+      "warm_standby": "Same as pilot light - S3 DR is identical for both strategies.",
+      "backup_restore": "CRR still preferred over AWS Backup (Backup storage is ~2x S3 cost). Same replication approach.",
+      "active_active": "Cross-region replicated bucket; same cost shape as pilot light or warm standby."
+    }
+  },
+  "amazon simple storage service": {
+    "backup_restore": 1.0,
+    "pilot_light": 1.0,
+    "warm_standby": 1.0,
+    "active_active": 1.0,
+    "explanations": {
+      "pilot_light": "Cross-region replication (CRR). Entire bucket replicated. Versioning required. Incremental costs: primary costs + data transfer.",
+      "warm_standby": "Same as pilot light - S3 DR is identical for both strategies.",
+      "backup_restore": "CRR still preferred over AWS Backup (Backup storage is ~2x S3 cost). Same replication approach.",
+      "active_active": "Cross-region replicated bucket; same cost shape as pilot light or warm standby."
+    }
+  },
+  "sns": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.0,
+    "active_active": 0.0,
+    "explanations": {
+      "pilot_light": "No messages delivered to SNS topics in secondary region.",
+      "warm_standby": "No messages delivered to SNS topics in secondary region.",
+      "backup_restore": "Nothing provisioned in DR region.",
+      "active_active": "Messages split across regions."
+    }
+  },
+  "amazon simple notification service": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.0,
+    "active_active": 0.0,
+    "explanations": {
+      "pilot_light": "No messages delivered to SNS topics in secondary region.",
+      "warm_standby": "No messages delivered to SNS topics in secondary region.",
+      "backup_restore": "Nothing provisioned in DR region.",
+      "active_active": "Messages split across regions."
+    }
+  },
+  "sqs": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.0,
+    "active_active": 0.0,
+    "explanations": {
+      "pilot_light": "No messages delivered to SQS queues in secondary region.",
+      "warm_standby": "No messages delivered to SQS queues in secondary region.",
+      "backup_restore": "Nothing provisioned in DR region.",
+      "active_active": "Messages split across regions."
+    }
+  },
+  "amazon simple queue service": {
+    "backup_restore": 0.0,
+    "pilot_light": 0.0,
+    "warm_standby": 0.0,
+    "active_active": 0.0,
+    "explanations": {
+      "pilot_light": "No messages delivered to SQS queues in secondary region.",
+      "warm_standby": "No messages delivered to SQS queues in secondary region.",
+      "backup_restore": "Nothing provisioned in DR region.",
+      "active_active": "Messages split across regions."
+    }
+  },
+  "vpc": {
+    "backup_restore": 0.1,
+    "pilot_light": 0.1,
+    "warm_standby": 0.2,
+    "active_active": 0.7,
+    "explanations": {
+      "backup_restore": "The VPC line is mostly hourly charges (interface endpoints, NAT gateways) plus usage-based data processing. Pre-deploying the network skeleton in DR duplicates a small slice of endpoint hours; with no traffic there is almost no data processing.",
+      "pilot_light": "Same as backup restore: DR endpoint and NAT gateway hours run, but the usage-based majority of the line (data processing) stays near zero without traffic.",
+      "warm_standby": "DR endpoint and NAT gateway hours run continuously, and the scaled-down warm fleet generates some data processing charges; still a small fraction of the primary line.",
+      "active_active": "Both regions carry full networking surface: NAT gateway hours and data processing in the DR region approach the primary's as traffic splits and replication flows between regions."
+    }
+  },
+  "amazon virtual private cloud": {
+    "backup_restore": 0.1,
+    "pilot_light": 0.1,
+    "warm_standby": 0.2,
+    "active_active": 0.7,
+    "explanations": {
+      "backup_restore": "The VPC line is mostly hourly charges (interface endpoints, NAT gateways) plus usage-based data processing. Pre-deploying the network skeleton in DR duplicates a small slice of endpoint hours; with no traffic there is almost no data processing.",
+      "pilot_light": "Same as backup restore: DR endpoint and NAT gateway hours run, but the usage-based majority of the line (data processing) stays near zero without traffic.",
+      "warm_standby": "DR endpoint and NAT gateway hours run continuously, and the scaled-down warm fleet generates some data processing charges; still a small fraction of the primary line.",
+      "active_active": "Both regions carry full networking surface: NAT gateway hours and data processing in the DR region approach the primary's as traffic splits and replication flows between regions."
+    }
+  },
+  "eks": {
+    "backup_restore": 0.0,
+    "pilot_light": 1.0,
+    "warm_standby": 1.0,
+    "active_active": 1.0,
+    "explanations": {
+      "backup_restore": "No DR-region cluster, so no control plane fee until failover bring-up. Container images replicate under ECR, not this line.",
+      "pilot_light": "The EKS control plane bills a flat hourly fee per cluster whether or not workloads run, so a pilot-light cluster doubles this line even at zero nodes. EC2 worker nodes bill under EC2, not here.",
+      "warm_standby": "Same as pilot light: the control plane fee is flat, so the DR cluster doubles this line regardless of warm node count. Warm EC2 node capacity bills under EC2. EKS Fargate pods, if used, add to this line only while running.",
+      "active_active": "A full control plane runs in each region, doubling this line. Worker capacity in both regions bills under EC2 (EKS Fargate pod usage would land on this line)."
+    }
+  },
+  "ecr": {
+    "backup_restore": 1.0,
+    "pilot_light": 1.0,
+    "warm_standby": 1.0,
+    "active_active": 1.0,
+    "explanations": {
+      "backup_restore": "Cross-region replication: full storage cost mirrored in DR region.",
+      "pilot_light": "Cross-region replication: full storage cost mirrored in DR region.",
+      "warm_standby": "Cross-region replication: full storage cost mirrored in DR region.",
+      "active_active": "Cross-region replication: full storage cost mirrored in DR region."
+    }
+  }
+}
